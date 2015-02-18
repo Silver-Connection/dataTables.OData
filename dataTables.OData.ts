@@ -592,8 +592,10 @@ declare function require(str: string);
             $.fn.dataTable.ext.feature.push({
                 fnInit: function (settings) {
                     var init = settings.oInit;
-                    var odata = $.fn.dataTable.OData(settings, init.odata || {});
-                    odata.searchColumnAddInputs();
+                    if (init.odata && init.odata != null) {
+                        var odata = $.fn.dataTable.OData(settings, init.odata);
+                        odata.searchColumnAddInputs();
+                    }
                     return; //"ODATA";
                 },
                 cFeature: 'O',
