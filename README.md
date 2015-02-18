@@ -11,7 +11,8 @@ OData V.4 support for DataTables V. 1.10.x
 // Settings
 var dt_settings = 
 {
-	 columns: [
+	dom: "lCtipO",
+	columns: [
 		{ data: "Name", searchMethod: "contains" },
 		{ data: "Age", type: "number" },
 		{ data: "Dogs", type: "number" },
@@ -26,5 +27,8 @@ var dt_settings =
 
 // DT initialisation
 var dt = $("#table").DataTables(dt_settings);
+
+// Get DataTablesOData instance
+var dt_odata = dt.odata();
 
 ```
