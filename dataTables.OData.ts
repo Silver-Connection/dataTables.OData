@@ -19,6 +19,13 @@ module DataTables {
 }
 
 module DataTableOData {
+    // Globals
+    export var CLASS: string = "OData";
+    export var VERSION: string = "1.0";
+    export var Instances: Init[];
+    export var ODataComparisonOperators: string[] = ["eq", "ne", "gt", "ge", "lt", "le", "has"];
+    export var ODataComparisonOperatorsMap: string[] = ["==", "!=", ">", ">=", "<", "<=", "has"];
+
     //#region "Settings"
 
     export interface ISettings {
@@ -48,14 +55,24 @@ module DataTableOData {
         pagingCache?: number;
 
         /**
-        * Number of pages to load
+        * OData operator map
+        */
+        mapOperators?: string[];
+
+        /**
+        * Enable column search,
         */
         searchColumns?: boolean;
 
         /**
-        * Number of pages to load
+        * Where to insert the search inputs: thead / tfoot
         */
         searchColumnsPlace?: string;
+
+        /**
+        * Callback function, is triggerd on successfull ajax
+        */
+        callback(odata: DataTableOData.Init): void;
     }
 
     interface ISettingsColumn {
@@ -78,6 +95,7 @@ module DataTableOData {
             this.pagingCache = 1;
             this.searchColumns = true;
             this.searchColumnsPlace = "tfoot";
+            this.mapOperators = DataTableOData.ODataComparisonOperatorsMap;
         }
 
         url: string;
@@ -87,18 +105,14 @@ module DataTableOData {
         pagingCache: number;
         searchColumns: boolean;
         searchColumnsPlace: string;
+        callback = null;
+        mapOperators: string[];
     }
 
     //#endregion "Settings"
 
     // Globals
-    export var Instances: Init[];
-    export var CLASS: string = "OData";
-    export var VERSION: string = "1.0";
     export var DEFAULTS: ISettings = new Settings();
-
-    export var ODataComparisonOperators = ["eq", "ne", "gt", "ge", "lt", "le", "has"];
-    export var ODataComparisonOperatorsMap = ["==", "!=", ">", ">=", "<", "<=", "has"];
 
     //#region "Static-Methods"
 
@@ -127,11 +141,17 @@ module DataTableOData {
             success: function (data: IODataQueryResult) {
                 if (data) {
                     settings._iRecordsTotal = data["@odata.count"];
+                    var back;
                     if (context.Settings.useObjects) {
-                        return callback(dataToObject(data, request.draw));
+                        back = dataToObject(data, request.draw);
                     } else {
-                        return callback(dataToArray(data, request.draw));
+                        back = dataToArray(data, request.draw);
                     }
+                    // calll back
+                    if (context.Settings.callback != null && typeof context.Settings.callback === "function") {
+                        context.Settings.callback(context);
+                    }
+                    return callback(back);
                 }
 
                 var error = { error: "No return data from server" };
@@ -238,7 +258,7 @@ module DataTableOData {
     * @param val Value
     * @param t Value type from column settings
     */
-    export function transformSearch(name: string, val: string, t: string): string {
+    export function transformSearch(map: string[], name: string, val: string, t: string): string {
         var found: boolean = false;
         var ands: string[] = new Array;
 
@@ -254,8 +274,8 @@ module DataTableOData {
         $.each(ands, function (j: number, value: string) {
             var searchStr = value.trim()
 
-            // Convert js operator to OData operator
-            $.each(DataTableOData.ODataComparisonOperatorsMap, function (i: number, opm: string) {
+            // Convert custom operator to OData operator
+            $.each(map, function (i: number, opm: string) {
                 searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i]);
             });
 
@@ -284,6 +304,7 @@ module DataTableOData {
     export class Init {
         constructor(table: DataTables.SettingsLegacy, settings?: string | ISettings | any) {
             this.Query = "";
+            this.Filter = "";
 
             // Private
             this._columns = new Array;
@@ -329,6 +350,11 @@ module DataTableOData {
         * OData query
         */
         Query: string;
+
+        /**
+        * OData query filter part
+        */
+        Filter: string;
 
         /**
         * Columns read from dataTables settings
@@ -383,6 +409,14 @@ module DataTableOData {
 
                 if (typeof settings.searchColumnsPlace === "string") {
                     this.Settings.searchColumnsPlace = settings.searchColumnsPlace;
+                }
+
+                if (typeof settings.mapOperators === "object" && settings.mapOperators != null) {
+                    this.Settings.mapOperators = settings.mapOperators;
+                }
+
+                if (typeof settings.callback === "function" && settings.callback != null) {
+                    this.Settings.callback = settings.callback;
                 }
             }
         }
@@ -490,7 +524,7 @@ module DataTableOData {
                         var info = $this._columnsSettings[i];
 
                         if (info.searchMethod == "unset") {
-                            var searchStr = DataTableOData.transformSearch(name, val.search.value, info.type);
+                            var searchStr = DataTableOData.transformSearch($this.Settings.mapOperators, name, val.search.value, info.type);
                             $this._search.push(searchStr.trim());
                         } else {
                             $this._search.push(info.searchMethod + "(" + name + "," + DataTableOData.transformValue(val.search.value, info.type) + ")");
@@ -529,20 +563,21 @@ module DataTableOData {
             }
 
             // $order
-            if (this.Settings.querySelect) {
+            if (this.Settings.queryOrder) {
                 this.Query = this.Query + "&$orderby=" + this._order.join(",");
             }
 
             // Has dataTable request
             if (data != null) {
                 // Server Side
-                if (this.Table.oInit.bServerSide) {
+                if (this.Table.oInit.bServerSide && data.length !== -1) {
                     this.Query = this.Query + "&$top=" + (data.length * this.Settings.pagingCache) + "&$skip=" + data.start;
                 }
 
                 // Search
                 if (this._search.length > 0) {
-                    this.Query = this.Query + "&$filter=" + this._search.join(" and ");
+                    this.Filter = "$filter=" + this._search.join(" and ");
+                    this.Query = this.Query + "&" + this.Filter;
                 }
             }
 

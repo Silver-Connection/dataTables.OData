@@ -1,7 +1,14 @@
 var DataTableOData;
 (function (DataTableOData) {
+    // Globals
+    DataTableOData.CLASS = "OData";
+    DataTableOData.VERSION = "1.0";
+    DataTableOData.Instances;
+    DataTableOData.ODataComparisonOperators = ["eq", "ne", "gt", "ge", "lt", "le", "has"];
+    DataTableOData.ODataComparisonOperatorsMap = ["==", "!=", ">", ">=", "<", "<=", "has"];
     var Settings = (function () {
         function Settings(url) {
+            this.callback = null;
             this.url = "";
             if (typeof url === "string") {
                 this.url = url || "";
@@ -12,18 +19,14 @@ var DataTableOData;
             this.pagingCache = 1;
             this.searchColumns = true;
             this.searchColumnsPlace = "tfoot";
+            this.mapOperators = DataTableOData.ODataComparisonOperatorsMap;
         }
         return Settings;
     })();
     DataTableOData.Settings = Settings;
     //#endregion "Settings"
     // Globals
-    DataTableOData.Instances;
-    DataTableOData.CLASS = "OData";
-    DataTableOData.VERSION = "1.0";
     DataTableOData.DEFAULTS = new Settings();
-    DataTableOData.ODataComparisonOperators = ["eq", "ne", "gt", "ge", "lt", "le", "has"];
-    DataTableOData.ODataComparisonOperatorsMap = ["==", "!=", ">", ">=", "<", "<=", "has"];
     //#region "Static-Methods"
     /**
     * Callback function for use in dataTables settings
@@ -47,12 +50,18 @@ var DataTableOData;
             success: function (data) {
                 if (data) {
                     settings._iRecordsTotal = data["@odata.count"];
+                    var back;
                     if (context.Settings.useObjects) {
-                        return callback(dataToObject(data, request.draw));
+                        back = dataToObject(data, request.draw);
                     }
                     else {
-                        return callback(dataToArray(data, request.draw));
+                        back = dataToArray(data, request.draw);
                     }
+                    // calll back
+                    if (context.Settings.callback != null && typeof context.Settings.callback === "function") {
+                        context.Settings.callback(context);
+                    }
+                    return callback(back);
                 }
                 var error = { error: "No return data from server" };
                 return error;
@@ -152,7 +161,7 @@ var DataTableOData;
     * @param val Value
     * @param t Value type from column settings
     */
-    function transformSearch(name, val, t) {
+    function transformSearch(map, name, val, t) {
         var found = false;
         var ands = new Array;
         if (val.contains("and")) {
@@ -167,8 +176,8 @@ var DataTableOData;
         var query = new Array;
         $.each(ands, function (j, value) {
             var searchStr = value.trim();
-            // Convert js operator to OData operator
-            $.each(DataTableOData.ODataComparisonOperatorsMap, function (i, opm) {
+            // Convert custom operator to OData operator
+            $.each(map, function (i, opm) {
                 searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i]);
             });
             // Create $filter query
@@ -194,6 +203,7 @@ var DataTableOData;
     var Init = (function () {
         function Init(table, settings) {
             this.Query = "";
+            this.Filter = "";
             // Private
             this._columns = new Array;
             this._columnsSettings = new Array;
@@ -247,6 +257,12 @@ var DataTableOData;
                 }
                 if (typeof settings.searchColumnsPlace === "string") {
                     this.Settings.searchColumnsPlace = settings.searchColumnsPlace;
+                }
+                if (typeof settings.mapOperators === "object" && settings.mapOperators != null) {
+                    this.Settings.mapOperators = settings.mapOperators;
+                }
+                if (typeof settings.callback === "function" && settings.callback != null) {
+                    this.Settings.callback = settings.callback;
                 }
             }
         };
@@ -347,7 +363,7 @@ var DataTableOData;
                     if (val.searchable && val.search.value) {
                         var info = $this._columnsSettings[i];
                         if (info.searchMethod == "unset") {
-                            var searchStr = DataTableOData.transformSearch(name, val.search.value, info.type);
+                            var searchStr = DataTableOData.transformSearch($this.Settings.mapOperators, name, val.search.value, info.type);
                             $this._search.push(searchStr.trim());
                         }
                         else {
@@ -384,18 +400,19 @@ var DataTableOData;
                 this.Query = this.Query + "&$select=" + this._columns.join(",");
             }
             // $order
-            if (this.Settings.querySelect) {
+            if (this.Settings.queryOrder) {
                 this.Query = this.Query + "&$orderby=" + this._order.join(",");
             }
             // Has dataTable request
             if (data != null) {
                 // Server Side
-                if (this.Table.oInit.bServerSide) {
+                if (this.Table.oInit.bServerSide && data.length !== -1) {
                     this.Query = this.Query + "&$top=" + (data.length * this.Settings.pagingCache) + "&$skip=" + data.start;
                 }
                 // Search
                 if (this._search.length > 0) {
-                    this.Query = this.Query + "&$filter=" + this._search.join(" and ");
+                    this.Filter = "$filter=" + this._search.join(" and ");
+                    this.Query = this.Query + "&" + this.Filter;
                 }
             }
             return (includeUrl ? this.Settings.url + "?" : "") + this.Query;
