@@ -1,4 +1,4 @@
-// Type definitions for JQuery DataTables 1.10.5
+﻿// Type definitions for JQuery DataTables 1.10.5
 // Project: http://www.datatables.net
 // Definitions by: Kiarash Ghiaseddin <kiarash@si-co.net>
 // Definitions: https://github.com/borisyankov/DefinitelyTyped
@@ -1648,6 +1648,7 @@ declare module DataTables {
     }
 
     export interface SettingsLegacy {
+        ajax: any;
         oApi: any;
         oFeatures: FeaturesLegacy;
         oScroll: ScrollingLegacy;
@@ -1656,7 +1657,6 @@ declare module DataTables {
         aanFeatures: ArrayStringNode[][];
         aoData: RowLegacy[];
         aiDisplay: number[];
-        //bServerSide: boolean;
         aiDisplayMaster: number[];
         aoColumns: ColumnLegacy[];
         aoHeader: any[];

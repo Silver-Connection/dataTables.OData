@@ -44,6 +44,8 @@ var DataTableOData;
         if (context.Settings.queryOrder) {
             context.getOrder(request);
         }
+        // Get main filter
+        context.getFilterMain(request);
         // Send odata request
         $.ajax({
             url: context.query(true, request),
@@ -164,11 +166,20 @@ var DataTableOData;
     function transformSearch(map, name, val, t) {
         var found = false;
         var ands = new Array;
+        var glue = " and ";
         if (val.contains("and")) {
             ands = val.split("and");
         }
         else if (val.contains("&&")) {
             ands = val.split("&&");
+        }
+        else if (val.contains("||")) {
+            ands = val.split("||");
+            glue = " or ";
+        }
+        else if (val.contains("or")) {
+            ands = val.split("or");
+            glue = " or ";
         }
         else {
             ands.push(val);
@@ -178,7 +189,7 @@ var DataTableOData;
             var searchStr = value.trim();
             // Convert custom operator to OData operator
             $.each(map, function (i, opm) {
-                searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i]);
+                searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i] + " ");
             });
             // Create $filter query
             $.each(DataTableOData.ODataComparisonOperators, function (i, op) {
@@ -195,7 +206,7 @@ var DataTableOData;
                 }
             });
         });
-        return found ? " " + query.join(" and ") : " eq " + name;
+        return found ? " " + query.join(glue) : name + " eq " + DataTableOData.transformValue(val.trim(), t);
     }
     DataTableOData.transformSearch = transformSearch;
     //#endregion "Static-Methods"
@@ -228,6 +239,18 @@ var DataTableOData;
                         this.readSettings(settings);
                     }
                     break;
+            }
+            // Remove key up event for general search 
+            if (table.aanFeatures["f"] && table.aanFeatures["f"] != null) {
+                // Unbind events 
+                $("div.dataTables_filter input", table.nTableWrapper).unbind();
+                // Add new event
+                var dt = new $.fn.dataTable.Api(table.nTable);
+                $("div.dataTables_filter input", table.nTableWrapper).keyup(function (e) {
+                    if (e.keyCode == 13) {
+                        dt.search($(this).val()).draw();
+                    }
+                });
             }
             return this;
         }
@@ -268,8 +291,6 @@ var DataTableOData;
         };
         /**
         * Add coulumn search inputs in tfoot
-        *
-        * @param data OData result
         */
         Init.prototype.searchColumnAddInputs = function () {
             if (this.Settings.searchColumns) {
@@ -296,13 +317,12 @@ var DataTableOData;
                         }
                         $(this).html('<input type="text" placeholder="' + name + '" value="' + val + '" />');
                         // Add event
-                        $("input", this).change(function () {
-                            var val = $(this).val();
-                            if (val.length == 0) {
-                                dt.column(i).search("").draw();
-                            }
-                            else if (val.length >= 3) {
-                                dt.column(i).search(val).draw();
+                        //$("input", this).change(function () {
+                        //    $this.searchInputEventFunction(dt, this, i);
+                        //});
+                        $("input", this).keyup(function (e) {
+                            if (e.keyCode == 13) {
+                                $this.searchInputEventFunction(dt, this, i);
                             }
                         });
                     }
@@ -310,6 +330,36 @@ var DataTableOData;
                         $(this).html("");
                     }
                 });
+            }
+        };
+        Init.prototype.searchInputEventFunction = function (dt, $this, i) {
+            var val = $($this).val();
+            if (val.length == 0) {
+                dt.column(i).search("").draw();
+            }
+            else {
+                dt.column(i).search(val).draw();
+            }
+        };
+        /**
+        * Clear all search values
+        *
+        * @param settings OData settings
+        */
+        Init.prototype.searchReset = function (draw) {
+            if (draw === void 0) { draw = false; }
+            var dt = new $.fn.dataTable.Api(this.Table.nTable);
+            // Global search
+            dt.search('');
+            // Column search
+            if (this.Settings.searchColumns) {
+                $.each(this._columns, function (i) {
+                    dt.column(i).search('');
+                });
+                $("tr.odata-search-column th input", this.Table.nTableWrapper).val('');
+            }
+            if (draw) {
+                dt.draw();
             }
         };
         //#endregion "Utils"
@@ -385,6 +435,16 @@ var DataTableOData;
                 $.each(data.order, function (i, val) {
                     $this._order.push(data.columns[val.column].name + " " + val.dir.trim().toLowerCase());
                 });
+            }
+        };
+        /**
+        * Read main filter values
+        *
+        * @param data DataTables ajax request data
+        */
+        Init.prototype.getFilterMain = function (data) {
+            if (typeof data.search.value == "string" && data.search.value !== "") {
+                this._search.push(data.search.value);
             }
         };
         /**

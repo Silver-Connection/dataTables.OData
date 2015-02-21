@@ -5,12 +5,12 @@
 }
 
 module DataTables {
-    export interface SettingsReturn extends DataTable {
-        0: SettingsLegacy;
+    export interface DataTable {
+        odata(): DataTableOData.Init;
     }
 
-    export interface SettingsLegacy {
-        ajax: any;
+    export interface SettingsReturn extends DataTable {
+        0: SettingsLegacy;
     }
 
     export interface ColumnLegacy {
@@ -134,6 +134,9 @@ module DataTableOData {
         if (context.Settings.queryOrder) {
             context.getOrder(request);
         }
+
+        // Get main filter
+        context.getFilterMain(request);
 
         // Send odata request
         $.ajax({
@@ -261,11 +264,18 @@ module DataTableOData {
     export function transformSearch(map: string[], name: string, val: string, t: string): string {
         var found: boolean = false;
         var ands: string[] = new Array;
+        var glue: string = " and ";
 
         if (val.contains("and")) {
             ands = val.split("and");
         } else if (val.contains("&&")) {
             ands = val.split("&&");
+        } else if (val.contains("||")) {
+            ands = val.split("||");
+            glue = " or ";
+        } else if (val.contains("or")) {
+            ands = val.split("or");
+            glue = " or ";
         } else {
             ands.push(val);
         }
@@ -276,7 +286,7 @@ module DataTableOData {
 
             // Convert custom operator to OData operator
             $.each(map, function (i: number, opm: string) {
-                searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i]);
+                searchStr = searchStr.replace(opm, DataTableOData.ODataComparisonOperators[i] + " ");
             });
 
             // Create $filter query
@@ -294,7 +304,7 @@ module DataTableOData {
                 }
             });
         });
-        return found ? " " + query.join(" and ") : " eq " + name;
+        return found ? " " + query.join(glue) : name + " eq " + DataTableOData.transformValue(val.trim(), t);
     }
 
     //#endregion "Static-Methods"
@@ -331,6 +341,19 @@ module DataTableOData {
                         this.readSettings(settings);
                     }
                     break;
+            }
+
+            // Remove key up event for general search 
+            if (table.aanFeatures["f"] && table.aanFeatures["f"] != null) {
+                // Unbind events 
+                $("div.dataTables_filter input", table.nTableWrapper).unbind();
+                // Add new event
+                var dt = new $.fn.dataTable.Api(table.nTable);
+                $("div.dataTables_filter input", table.nTableWrapper).keyup(function (e) {
+                    if (e.keyCode == 13) {
+                        dt.search($(this).val()).draw();
+                    }
+                });
             }
 
             return this;
@@ -423,8 +446,6 @@ module DataTableOData {
 
         /**
         * Add coulumn search inputs in tfoot
-        *
-        * @param data OData result
         */
         searchColumnAddInputs(): void {
             if (this.Settings.searchColumns) {
@@ -453,19 +474,53 @@ module DataTableOData {
                         }
                         $(this).html('<input type="text" placeholder="' + name + '" value="' + val + '" />');
                         // Add event
-                        $("input", this).change(function () {
-                            var val: string = $(this).val();
-                            if (val.length == 0) {
-                                dt.column(i).search("").draw();
-                            }
-                            else if (val.length >= 3) {
-                                dt.column(i).search(val).draw();
+                        //$("input", this).change(function () {
+                        //    $this.searchInputEventFunction(dt, this, i);
+                        //});
+                        $("input", this).keyup(function (e) {
+                            if (e.keyCode == 13) {
+                                $this.searchInputEventFunction(dt, this, i);
                             }
                         });
+
                     } else {
                         $(this).html("");
                     }
                 });
+            }
+        }
+
+        private searchInputEventFunction(dt, $this, i): any {
+            var val: string = $($this).val();
+            if (val.length == 0) {
+                dt.column(i).search("").draw();
+            }
+            else {
+                dt.column(i).search(val).draw();
+            }
+        }
+
+        /**
+        * Clear all search values
+        *
+        * @param settings OData settings
+        */
+        searchReset(draw: boolean = false): void {
+            var dt: DataTables.DataTable = new $.fn.dataTable.Api(this.Table.nTable);
+            
+            // Global search
+            dt.search('');
+
+            // Column search
+            if (this.Settings.searchColumns) {
+                $.each(this._columns, function (i: number) {
+                    dt.column(i).search('');
+                });
+                $("tr.odata-search-column th input", this.Table.nTableWrapper).val('')
+            }
+
+            if (draw) {
+                dt.draw();
             }
         }
 
@@ -550,6 +605,17 @@ module DataTableOData {
         }
 
         /**
+        * Read main filter values
+        *
+        * @param data DataTables ajax request data
+        */
+        getFilterMain(data: DataTables.AjaxDataRequest): void {
+            if (typeof data.search.value == "string" && data.search.value !== "") {
+                this._search.push(data.search.value);
+            }
+        }
+
+        /**
         * Build query
         *
         * @param settings DataTables settings
@@ -625,11 +691,13 @@ declare function require(str: string);
             typeof $.fn.dataTable.versionCheck == "function" &&
             $.fn.dataTable.versionCheck('1.10.0')) {
             $.fn.dataTable.ext.feature.push({
-                fnInit: function (settings) {
+                fnInit: function (settings: DataTables.SettingsLegacy) {
                     var init = settings.oInit;
                     if (init.odata && init.odata != null) {
                         var odata = $.fn.dataTable.OData(settings, init.odata);
                         odata.searchColumnAddInputs();
+
+
                     }
                     return; //"ODATA";
                 },
