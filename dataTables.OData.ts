@@ -16,6 +16,7 @@
  *
  * For details please refer to: https://github.com/Silver-Connection/dataTables.OData and http://www.datatables.net
  */
+
 interface IODataQueryResult {
     "@odata.context": string;
     "@odata.count": number;

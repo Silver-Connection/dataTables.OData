@@ -1,3 +1,21 @@
+/**
+ * @summary     DataTables OData connector
+ * @description Paginate, search and order HTML tables, with data from a OData service
+ * @version     1.1
+ * @file        dataTables.OData.js
+ * @author      Silver Connection OHG
+ * @contact     Kiarash G. <kiarash@si-co.net>
+ * @copyright   Copyright 2015 Silver Connection OHG
+ *
+ * This source file is free software, available under the following license:
+ *   MIT license - http://datatables.net/license
+ *
+ * This source file is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the license files for details.
+ *
+ * For details please refer to: https://github.com/Silver-Connection/dataTables.OData and http://www.datatables.net
+ */
 var DataTableOData;
 (function (DataTableOData) {
     // Globals
